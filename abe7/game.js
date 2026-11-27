@@ -2,7 +2,8 @@ GameState = {
     LOAD: "LOAD",
     INIT: "INIT",
     PLAY: "PLAY",
-    STOP: "STOP"
+    STOP: "STOP",
+    OVER: "OVER",
 };
 
 Game = function(canvasId) {
@@ -23,6 +24,13 @@ Game = function(canvasId) {
         { id: 'poop', type: 'image', src: "assets/poop.png" },
         { id: 'cell_up', type: 'image', src: "assets/cell_up.png" },
         { id: 'cell_down', type: 'image', src: "assets/cell_down.png" },
+
+        { id: 'smiley0', type: 'image', src: "assets/smiley-00.png" },
+        { id: 'smiley1', type: 'image', src: "assets/smiley-01.png" },
+        { id: 'smiley2', type: 'image', src: "assets/smiley-02.png" },
+        { id: 'smiley3', type: 'image', src: "assets/smiley-03.png" },
+        { id: 'smiley4', type: 'image', src: "assets/smiley-04.png" },
+
     ];
 
     this.currentTime = 0;
@@ -41,11 +49,13 @@ Game = function(canvasId) {
 
     this.timeTickInterval=null;
 
-    this.buttons=null;        
+    this.cellButtons=null;        
+    this.smileyButton=null;        
 
     this.boxW=10;
     this.boxH=10;
     this.numPoops=10;
+    this.boxLeft=0
     
 };
 
@@ -165,7 +175,7 @@ Game.prototype.doPreload = function() {
         var delayMs = 300;
         if (now - this.preloadCompleteTime >= delayMs) {
 
-            Button.sprites={
+            CellButton.sprites={
                 num0: this.loadedAssets.num0,
                 num1: this.loadedAssets.num1,
                 num2: this.loadedAssets.num2,
@@ -180,6 +190,14 @@ Game.prototype.doPreload = function() {
                 cell_up: this.loadedAssets.cell_up,
                 cell_down: this.loadedAssets.cell_down,
             };
+
+            SmileyButton.sprites={
+                smiley0: this.loadedAssets.smiley0,
+                smiley1: this.loadedAssets.smiley1,
+                smiley2: this.loadedAssets.smiley2,
+                smiley3: this.loadedAssets.smiley3,
+                smiley4: this.loadedAssets.smiley4,
+            }
 
             this.state = GameState.INIT;
         }
@@ -202,36 +220,92 @@ Game.prototype.doInit = function() {
         poops[j] = tmp;
     }
 
-    this.buttons = [];
+    this.boxLeft=total-this.numPoops;
+
+    this.cellButtons = [];
     for (var j = 0; j < this.boxH; j++) {
-        this.buttons.push([]);
+        this.cellButtons.push([]);
         for (var i = 0; i < this.boxW; i++) {
             var k=j*this.boxW+i;
-            this.buttons[j].push(new Button(poops[k], i * 32, j * 32, 32, 32));
+            this.cellButtons[j].push(new CellButton(poops[k], i * 32, (j+2) * 32, 32, 32));
         }
     }
+
+    this.smileyButton=new SmileyButton(0,0,32,32);
 
     this.state=GameState.PLAY;
 }
 
 Game.prototype.openCell = function(y,x) {
-    this.buttons[y][x].state=ButtonState.OPEN;
+    if(x<0 || x>=this.boxW || y<0 || y>=this.boxH) return;
+    if(this.cellButtons[y][x].state==CellButtonState.OPEN) return;
+
+    this.cellButtons[y][x].state=CellButtonState.OPEN;
+    this.boxLeft--;
+
+    var n=0;
+    for(var j=-1; j<=1; j++) {
+        for(var i=-1; i<=1; i++) {
+            if(i==0 && j==0) continue;
+            if(x+i<0 || x+i>=this.boxW || y+j<0 || y+j>=this.boxH) continue;
+            if(this.cellButtons[y+j][x+i].isPoop) n++;
+        }
+    }
+
+    this.cellButtons[y][x].n=n;
+
+    if(n!=0) return;
+
+    for(var j=-1; j<=1; j++) {
+        for(var i=-1; i<=1; i++) {
+            if(i==0 && j==0) continue;
+            this.openCell(y+j,x+i);
+        }
+    }
 }
 
 Game.prototype.doPlay = function() {
     Graphics.clrscr(this.ctx, palette[10]);
 
+    if(pointer.isDown) {
+        this.smileyButton.n=4;
+    } else {
+        this.smileyButton.n=1;
+    }
+
+    this.smileyButton.handleEvents(pointer);
+    this.smileyButton.draw(this.ctx);
+
+    if(this.smileyButton.isClicked) {
+        this.state=GameState.INIT;
+    }
+
     for (var j = 0; j < this.boxH; j++) {
         for (var i = 0; i < this.boxW; i++) {
 
-            this.buttons[j][i].handleEvents(pointer);
-            this.buttons[j][i].draw(this.ctx);
+            this.cellButtons[j][i].handleEvents(pointer);
+            this.cellButtons[j][i].draw(this.ctx);
 
-            if(this.buttons[j][i].isClicked && this.buttons[j][i].state!=ButtonState.OPEN) {
-                if(this.buttons[j][i].isPoop) {
-                    this.buttons[j][i].state=ButtonState.OPEN;
+            if(this.cellButtons[j][i].isClicked && this.cellButtons[j][i].state!=CellButtonState.OPEN) {
+                if(this.cellButtons[j][i].isPoop) {
+
+                    for(var j=0;j<this.boxH;j++) {
+                        for(var i=0;i<this.boxW;i++) {
+                            if(this.cellButtons[j][i].isPoop) {
+                                this.cellButtons[j][i].state=CellButtonState.OPEN;
+                            }
+                        }
+                    }
+
+                    this.smileyButton.n=3;
+                    this.state=GameState.OVER;    
+                                        
                 } else {
                     this.openCell(j,i);
+                    if(this.boxLeft==0) {
+                        this.smileyButton.n=2;
+                        this.state=GameState.STOP;    
+                    }
                 }
             }            
         }
@@ -240,6 +314,36 @@ Game.prototype.doPlay = function() {
 
 Game.prototype.doStop = function() {
     Graphics.clrscr(this.ctx,palette[10]);    
+
+    this.smileyButton.handleEvents(pointer);
+    this.smileyButton.draw(this.ctx);
+
+    if(this.smileyButton.isClicked) {
+        this.state=GameState.INIT;
+    }
+    
+    for (var j = 0; j < this.boxH; j++) {
+        for (var i = 0; i < this.boxW; i++) {
+            this.cellButtons[j][i].draw(this.ctx);
+        }
+    }
+}
+
+Game.prototype.doOver = function() {
+    Graphics.clrscr(this.ctx,palette[10]);    
+
+    this.smileyButton.handleEvents(pointer);
+    this.smileyButton.draw(this.ctx);
+
+    if(this.smileyButton.isClicked) {
+        this.state=GameState.INIT;
+    }
+
+    for (var j = 0; j < this.boxH; j++) {
+        for (var i = 0; i < this.boxW; i++) {
+            this.cellButtons[j][i].draw(this.ctx);
+        }
+    }
 }
 
 Game.prototype.draw = function() {
@@ -257,6 +361,9 @@ Game.prototype.draw = function() {
         case GameState.STOP:
             this.doStop();
             break;
+        case GameState.OVER:
+            this.doOver();
+            break;
         default:
             break;
     }
@@ -267,7 +374,7 @@ Game.prototype.setup = function() {
     var self = this;
 
     this.canvas.width = 320;
-    this.canvas.height = 320;
+    this.canvas.height = 320+64;
 
     this.timeTickInterval = setInterval(function() {
         self.timeTick();
