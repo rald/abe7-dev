@@ -303,6 +303,15 @@ Game.prototype.doPlay = function() {
                 } else {
                     this.openCell(j,i);
                     if(this.boxLeft==0) {
+
+                        for(var j=0;j<this.boxH;j++) {
+                            for(var i=0;i<this.boxW;i++) {
+                                if(this.cellButtons[j][i].isPoop) {
+                                    this.cellButtons[j][i].state=CellButtonState.OPEN;
+                                }
+                            }
+                        }
+
                         this.smileyButton.n=2;
                         this.state=GameState.STOP;    
                     }
